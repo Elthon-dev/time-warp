@@ -162,6 +162,9 @@ public final class TimeEngine {
             Prefs.snapshotClocks(app);
             lastApplyWall = SystemClock.elapsedRealtime();
             say("    OK via " + o.method + " | offset now " + formatOffset(newOffset));
+            ShizukuRunner.Result proof = ShizukuRunner.sh("date");
+            if (!proof.ok()) proof = ShizukuRunner.shViaRish("date");
+            say("  proof `date` -> " + proof.combined().replace('\n', ' ').trim());
             if (ShizukuRunner.uid() == 0) {
                 // Push system time into the RTC so the warp also survives a reboot.
                 ShizukuRunner.Result hw = ShizukuRunner.sh("hwclock -uw && sync");
@@ -222,6 +225,17 @@ public final class TimeEngine {
         }
         failures.append("[cmd alarm set-time: exit ").append(r1.exit)
                 .append(" ").append(shortMsg(r1)).append("] ");
+
+        // 1b. Same command through the local `rish` binary (in-process, forwards
+        //     to the Shizuku server) - covers flaky newProcess binder paths.
+        ShizukuRunner.Result r1b = ShizukuRunner.shViaRish("cmd alarm set-time " + target);
+        say("  rish cmd alarm set-time -> exit " + r1b.exit + " " + r1b.combined());
+        if (r1b.ok() && clockAt(target)) {
+            broadcastTimeSetIfNeeded("rish cmd alarm");
+            return new Outcome(true, "rish cmd alarm", r1b.combined());
+        }
+        failures.append("[rish cmd alarm: exit ").append(r1b.exit)
+                .append(" ").append(shortMsg(r1b)).append("] ");
 
         // 2. time_detector network suggestion.
         long elapsed = SystemClock.elapsedRealtime();

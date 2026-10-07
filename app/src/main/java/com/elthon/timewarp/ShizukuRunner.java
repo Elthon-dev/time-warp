@@ -85,6 +85,65 @@ public final class ShizukuRunner {
         return exec(new String[]{"sh", "-c", command});
     }
 
+    /**
+     * Run a command through the standalone {@code rish} binary (in-process, no
+     * binder call). rish forwards to the Shizuku server over its unix socket,
+     * so commands execute with the server's (shell/root) privileges - exactly
+     * like {@code rish -c '...'} on a terminal. Used as a fallback when the
+     * newProcess binder path misbehaves.
+     */
+    public static Result shViaRish(String command) {
+        for (String rish : new String[]{"rish", "/data/local/tmp/rish", "/system/bin/rish"}) {
+            Result r = execLocal(new String[]{rish, "-c", command});
+            if (r.exit != -1 || !r.err.contains("No such file")) return r; // found a real rish
+        }
+        return new Result(-1, "", "rish binary not found on PATH");
+    }
+
+    /** Local Runtime.exec with the same timeout/gobble semantics as Shizuku exec. */
+    public static Result execLocal(String[] argv) {
+        ProcessBuilder pb = new ProcessBuilder(argv);
+        Process p;
+        try {
+            p = pb.start();
+        } catch (Throwable t) {
+            return new Result(-1, "", "local exec failed: " + t);
+        }
+
+        StreamGobbler outG = new StreamGobbler(p.getInputStream());
+        StreamGobbler errG = new StreamGobbler(p.getErrorStream());
+        outG.start();
+        errG.start();
+
+        Integer exit = null;
+        long deadline = System.currentTimeMillis() + 15_000L;
+        try {
+            while (System.currentTimeMillis() < deadline) {
+                if (p.waitFor(200, TimeUnit.MILLISECONDS)) {
+                    exit = p.exitValue();
+                    break;
+                }
+            }
+        } catch (Throwable t) {
+            return new Result(-1, outG.get(), "local waitFor failed: " + t + "\n" + errG.get());
+        }
+        if (exit == null) {
+            p.destroy();
+            try {
+                p.waitFor(300, TimeUnit.MILLISECONDS);
+            } catch (Throwable ignored) {
+            }
+            p.destroyForcibly();
+            outG.joinQuietly();
+            errG.joinQuietly();
+            return new Result(-1, outG.get(), "TIMEOUT after 15s (local)\n" + errG.get());
+        }
+
+        outG.joinQuietly();
+        errG.joinQuietly();
+        return new Result(exit, outG.get(), errG.get());
+    }
+
     public static Result exec(String[] argv) {
         if (!isRunning()) return new Result(-1, "", "shizuku server not running");
         if (!hasPermission()) return new Result(-1, "", "shizuku permission not granted");
