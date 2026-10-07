@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.concurrent.TimeUnit;
 
+import rikka.shizuku.IShizukuService;
 import rikka.shizuku.Shizuku;
 
 /**
@@ -88,7 +89,11 @@ public final class ShizukuRunner {
 
         Process process;
         try {
-            process = Shizuku.newProcess(argv, null, null);
+            IShizukuService service = IShizukuService.Stub.asInterface(Shizuku.getBinder());
+            if (service == null) {
+                return new Result(-1, "", "shizuku service binder is null");
+            }
+            process = service.newProcess(argv, null, null);
         } catch (Throwable t) {
             return new Result(-1, "", "newProcess failed: " + t);
         }
