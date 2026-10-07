@@ -43,6 +43,12 @@ jobs:
       - name: Build release APK
         run: gradle :app:assembleRelease --stacktrace --warning-mode all -PtwVersionCode=${{ github.run_number }}
 
+      - name: Print signing certificate
+        # Lets us confirm the SAME signing key is used across all builds.
+        run: |
+          keytool -printcert -jarfile app/build/outputs/apk/release/app-release.apk \
+            | grep -E 'Owner|Issuer|SHA256' || true
+
       - name: Collect APK
         run: |
           mkdir -p dist
