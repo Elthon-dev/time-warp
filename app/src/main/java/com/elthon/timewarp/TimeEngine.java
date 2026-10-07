@@ -13,11 +13,16 @@ import java.util.Calendar;
  * change the system time again (then the offset is updated).
  *
  * Strategy chain (each step logged, first verified win is used):
- *   1. settings put global auto_time 0        (stop NTP snap-back)
- *   2. cmd alarm set-time <epoch_ms>          (AOSP shell cmd, shell has SET_TIME)
- *   3. cmd time_detector suggest_network_time (time detector path)
- *   4. toybox date MMDDhhmmCCYY.ss            (blocked on most ROMs, cheap to try)
- *   5. su paths                               (only when Shizuku runs as root)
+ *   0. settings put global auto_time 0      (stop NTP snap-back)
+ *   1. cmd alarm set-time <epoch_ms>        (AOSP shell cmd, shell has SET_TIME)
+ *   1b. rish -c 'cmd alarm set-time <ms>'   (local rish binary, forwards to Shizuku)
+ *   2. cmd time_detector suggest_network_time (time detector path)
+ *   3. toybox date MMDDhhmmCCYY.ss          (blocked on most ROMs, cheap to try)
+ *   4. su paths                             (only when Shizuku runs as root)
+ *
+ * On a verified warp it ALSO re-points the system NTP at an in-app SNTP server
+ * that serves the warped clock, so auto_time can be on with the network stack
+ * itself believing the warp is real (NtpWiring / SntpServer).
  */
 public final class TimeEngine {
 
@@ -109,7 +114,7 @@ public final class TimeEngine {
         c.add(Calendar.DAY_OF_YEAR, 1);
         long target = c.getTimeInMillis();
         say(">>> Tomorrow: target = " + fmt(target));
-        return setAbsolute(target, "+1 day");
+        return setAbsolute(target, "+1 day", true);
     }
 
     /** Back to reality. Prefers a live network clock, falls back to stored offset. */
@@ -129,13 +134,11 @@ public final class TimeEngine {
             target = realNowOffline();
             say("    network unavailable, using offset math = " + fmt(target));
         }
-        Outcome o = setAbsolute(target, "reset");
+        Outcome o = setAbsolute(target, "reset", false);
         if (o.success) {
             Prefs.setOffset(app, 0);
             Prefs.clearLastTarget(app);
             say("    offset cleared (0). You are on the real clock again.");
-            ShizukuRunner.Result a = ShizukuRunner.sh("settings put global auto_time 1");
-            say("  settings put global auto_time 1 -> exit " + a.exit + " " + a.combined());
         }
         return o;
     }
@@ -143,14 +146,17 @@ public final class TimeEngine {
     /** Arbitrary absolute time (timestamp button). */
     public synchronized Outcome jumpToMillis(long target, String label) {
         say(">>> Jump to " + fmt(target) + " (" + label + ")");
-        return setAbsolute(target, label);
+        return setAbsolute(target, label, true);
     }
 
     /**
      * Core setter. Recomputes the offset from the *current* real time so that
      * Reset keeps working after any jump.
+     *
+     * @param wireNetwork true = warp mode (tell the NTP stack the warp is real);
+     *                    false = real mode (point NTP back at the real world)
      */
-    private Outcome setAbsolute(long target, String label) {
+    private Outcome setAbsolute(long target, String label, boolean wireNetwork) {
         long real = resolveRealForJump();
         long newOffset = target - real;
 
@@ -165,6 +171,12 @@ public final class TimeEngine {
             ShizukuRunner.Result proof = ShizukuRunner.sh("date");
             if (!proof.ok()) proof = ShizukuRunner.shViaRish("date");
             say("  proof `date` -> " + proof.combined().replace('\n', ' ').trim());
+            if (wireNetwork) {
+                NtpWiring.wire(this::say);
+            } else {
+                NtpWiring.unwire(this::say);
+            }
+            setGuardService(app, wireNetwork);
             if (ShizukuRunner.uid() == 0) {
                 // Push system time into the RTC so the warp also survives a reboot.
                 ShizukuRunner.Result hw = ShizukuRunner.sh("hwclock -uw && sync");
@@ -183,7 +195,7 @@ public final class TimeEngine {
         long target = Prefs.getLastTarget(app);
         if (target <= 0) return new Outcome(false, "-", "no warped target stored");
         say(">>> Auto re-applying stored warp: " + fmt(target));
-        return setAbsolute(target, "auto re-apply");
+        return setAbsolute(target, "auto re-apply", true);
     }
 
     /**
@@ -197,7 +209,7 @@ public final class TimeEngine {
         if (target <= 0) return null;
         if (Math.abs(systemNow() - target) < 60_000L) return null; // still on target
         say(">>> Self-heal: clock drifted from stored warp, re-applying...");
-        return setAbsolute(target, "self-heal");
+        return setAbsolute(target, "self-heal", true);
     }
 
     private Outcome applySystemTime(long target) {
@@ -278,6 +290,20 @@ public final class TimeEngine {
         }
 
         return new Outcome(false, "-", failures.toString().trim());
+    }
+
+    /** Starts/stops the foreground keep-alive that holds the warp SNTP server up. */
+    private static void setGuardService(android.content.Context ctx, boolean warped) {
+        try {
+            android.content.Intent i = new android.content.Intent(ctx, WarpGuardService.class);
+            if (warped) {
+                if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i);
+                else ctx.startService(i);
+            } else {
+                ctx.stopService(i);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private void broadcastTimeSetIfNeeded(String via) {

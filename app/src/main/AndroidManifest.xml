@@ -40,6 +40,15 @@
                 android:value="time_warp_overlay_bubble_quick_actions" />
         </service>
 
+        <service
+            android:name=".WarpGuardService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="time_warp_keepalive_ntp_server_and_self_heal" />
+        </service>
+
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
