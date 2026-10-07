@@ -21,6 +21,14 @@ public final class NtpWiring {
         int port = SntpServer.port();
         log.log("  warp SNTP server: 0.0.0.0:" + port + " (serving the warped clock)");
 
+        if (WarpWeb.start()) {
+            log.log("  warp HTTP server: 0.0.0.0:" + WarpWeb.port()
+                    + " (any device sees the warp via Date header/body)");
+            log.log("  friend check: curl http://" + SntpServer.lanIp() + ":" + WarpWeb.port() + "/");
+        } else {
+            log.log("  warp HTTP server bind FAILED (still serving NTP only)");
+        }
+
         boolean configured = false;
         String[] attempts = {
                 "cmd network_time_update_service set_server_config_for_tests"
@@ -69,7 +77,8 @@ public final class NtpWiring {
         ShizukuRunner.Result a = ShizukuRunner.sh("settings put global auto_time 1");
         log.log("  auto_time ON (real time again) -> exit " + a.exit);
         SntpServer.stop();
-        log.log("  warp SNTP server stopped");
+        WarpWeb.stop();
+        log.log("  warp SNTP + HTTP servers stopped");
     }
 
     private static boolean suspicious(ShizukuRunner.Result r) {

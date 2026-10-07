@@ -40,6 +40,9 @@ public class WarpGuardService extends Service {
                     if (!SntpServer.running()) {
                         Log.i(TAG, "guard: warp SNTP server down, re-wiring NTP");
                         NtpWiring.wire(WarpGuardService.this::say);
+                    } else if (!WarpWeb.running()) {
+                        Log.i(TAG, "guard: warp HTTP server down, restarting");
+                        WarpWeb.start();
                     }
                     PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
                     PowerManager.WakeLock wl = pm != null
@@ -91,6 +94,7 @@ public class WarpGuardService extends Service {
         main.removeCallbacks(tick);
         if (Prefs.getLastTarget(this) <= 0) {
             SntpServer.stop();
+            WarpWeb.stop();
         }
     }
 
