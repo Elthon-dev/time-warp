@@ -37,6 +37,9 @@ public final class TimeEngine {
         }
     }
 
+    /** Wall (system) time this process last applied itself, for receiver debouncing. */
+    public static volatile long lastApplyWall;
+
     private final Context app;
     private final Logger log;
 
@@ -129,7 +132,10 @@ public final class TimeEngine {
         Outcome o = setAbsolute(target, "reset");
         if (o.success) {
             Prefs.setOffset(app, 0);
+            Prefs.clearLastTarget(app);
             say("    offset cleared (0). You are on the real clock again.");
+            ShizukuRunner.Result a = ShizukuRunner.sh("settings put global auto_time 1");
+            say("  settings put global auto_time 1 -> exit " + a.exit + " " + a.combined());
         }
         return o;
     }
@@ -152,8 +158,15 @@ public final class TimeEngine {
 
         if (o.success) {
             Prefs.setOffset(app, newOffset);
+            Prefs.setLastTarget(app, target);
             Prefs.snapshotClocks(app);
+            lastApplyWall = SystemClock.elapsedRealtime();
             say("    OK via " + o.method + " | offset now " + formatOffset(newOffset));
+            if (ShizukuRunner.uid() == 0) {
+                // Push system time into the RTC so the warp also survives a reboot.
+                ShizukuRunner.Result hw = ShizukuRunner.sh("hwclock -uw && sync");
+                say("  hwclock -uw && sync (root) -> exit " + hw.exit + " " + hw.combined());
+            }
         } else {
             say("    ALL STRATEGIES FAILED: " + o.detail);
         }
@@ -161,6 +174,28 @@ public final class TimeEngine {
     }
 
     // ----------------------------------------------------------- strategies
+
+    /** Re-apply the stored warp target after a reboot / outside time change. */
+    public synchronized Outcome reapplyLastWarp() {
+        long target = Prefs.getLastTarget(app);
+        if (target <= 0) return new Outcome(false, "-", "no warped target stored");
+        say(">>> Auto re-applying stored warp: " + fmt(target));
+        return setAbsolute(target, "auto re-apply");
+    }
+
+    /**
+     * If the clock drifted away from the stored warp (reboot, auto-time on, RTC
+     * reset), recalibrate the offset and warp it back. No-op -> null. Intended
+     * for app-start self-heal; see also ClockGuardReceiver.
+     */
+    public synchronized Outcome maybeSelfHeal() {
+        if (!ShizukuRunner.isRunning() || !ShizukuRunner.hasPermission()) return null;
+        long target = Prefs.getLastTarget(app);
+        if (target <= 0) return null;
+        if (Math.abs(systemNow() - target) < 60_000L) return null; // still on target
+        say(">>> Self-heal: clock drifted from stored warp, re-applying...");
+        return setAbsolute(target, "self-heal");
+    }
 
     private Outcome applySystemTime(long target) {
         if (!ShizukuRunner.isRunning()) {

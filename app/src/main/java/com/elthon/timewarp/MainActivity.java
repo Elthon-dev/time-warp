@@ -93,6 +93,20 @@ public class MainActivity extends Activity {
             main.postDelayed(() -> permissionCard.show(true), 350);
         }
 
+        if (ShizukuRunner.isRunning() && ShizukuRunner.hasPermission()) {
+            io.execute(() -> {
+                try {
+                    TimeEngine.Outcome h = engine.maybeSelfHeal();
+                    if (h != null) {
+                        appendLog(h.success ? "self-heal: back on target via " + h.method
+                                : "self-heal failed: " + h.detail);
+                    }
+                } catch (Throwable t) {
+                    appendLog("self-heal crashed: " + t);
+                }
+            });
+        }
+
         Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
         Shizuku.addRequestPermissionResultListener(permissionResultListener);
         main.post(ticker);

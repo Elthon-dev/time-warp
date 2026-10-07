@@ -11,6 +11,7 @@ public final class Prefs {
     private static final String K_LAST_ELAPSED = "last_elapsed_ms";
     private static final String K_BUBBLE = "bubble_enabled";
     private static final String K_SEEN_TUTORIAL = "bubble_tutorial_seen";
+    private static final String K_LAST_TARGET = "last_target_ms";
 
     private static SharedPreferences sp(Context c) {
         return c.getSharedPreferences(NAME, Context.MODE_PRIVATE);
@@ -71,5 +72,18 @@ public final class Prefs {
         // Both clocks advanced identically since the snapshot unless something
         // external (reboot, RTC reset, another time-changer) interfered.
         return Math.abs(predicted - actual) < 10 * 60 * 1000L;
+    }
+
+    /** Absolute system-clock target of the last successful warp; 0 = on real time. */
+    public static long getLastTarget(Context c) {
+        return sp(c).getLong(K_LAST_TARGET, 0L);
+    }
+
+    public static void setLastTarget(Context c, long targetMs) {
+        sp(c).edit().putLong(K_LAST_TARGET, targetMs).apply();
+    }
+
+    public static void clearLastTarget(Context c) {
+        sp(c).edit().putLong(K_LAST_TARGET, 0L).apply();
     }
 }
