@@ -274,9 +274,8 @@ public class BubbleService extends Service {
     private Button panelButton(String label, View.OnClickListener l) {
         Button b = new Button(this);
         b.setText(label);
-        b.setTextAllCaps(false);
-        b.setTextSize(14f);
         b.setAllCaps(false);
+        b.setTextSize(14f);
         b.setOnClickListener(l);
         return b;
     }
