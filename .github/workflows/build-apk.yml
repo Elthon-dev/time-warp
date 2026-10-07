@@ -23,8 +23,16 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Keep a stable debug keystore
+        # Runners are ephemeral, so without this every build gets a NEW
+        # signature and updates stop installing over the previous APK.
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: timewarp-debug-keystore-v1
+
       - name: Build release APK
-        run: gradle :app:assembleRelease --stacktrace --warning-mode all
+        run: gradle :app:assembleRelease --stacktrace --warning-mode all -PtwVersionCode=${{ github.run_number }}
 
       - name: Collect APK
         run: |

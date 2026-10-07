@@ -93,7 +93,7 @@ public class MainActivity extends Activity {
             main.postDelayed(() -> permissionCard.show(true), 350);
         }
 
-        Shizuku.addBinderReceivedListener(binderReceivedListener);
+        Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
         Shizuku.addRequestPermissionResultListener(permissionResultListener);
         main.post(ticker);
     }

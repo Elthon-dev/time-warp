@@ -1,11 +1,14 @@
 package com.elthon.timewarp;
 
 import android.content.pm.PackageManager;
+import android.os.ParcelFileDescriptor;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.concurrent.TimeUnit;
 
+import moe.shizuku.server.IRemoteProcess;
+import moe.shizuku.server.IShizukuService;
 import rikka.shizuku.Shizuku;
 
 /**
@@ -86,33 +89,61 @@ public final class ShizukuRunner {
         if (!isRunning()) return new Result(-1, "", "shizuku server not running");
         if (!hasPermission()) return new Result(-1, "", "shizuku permission not granted");
 
-        Process process;
+        // Runs as shell/root inside the Shizuku server process, not in our app.
+        IRemoteProcess remote;
         try {
-            process = Runtime.getRuntime().exec(argv);
+            IShizukuService service = IShizukuService.Stub.asInterface(Shizuku.getBinder());
+            if (service == null) return new Result(-1, "", "shizuku service binder is null");
+            remote = service.newProcess(argv, null, null);
+            if (remote == null) return new Result(-1, "", "newProcess returned null");
         } catch (Throwable t) {
-            return new Result(-1, "", "exec failed: " + t);
+            return new Result(-1, "", "newProcess failed: " + t);
         }
 
-        StreamGobbler outG = new StreamGobbler(process.getInputStream());
-        StreamGobbler errG = new StreamGobbler(process.getErrorStream());
+        ParcelFileDescriptor outPfd, errPfd;
+        try {
+            outPfd = remote.getInputStream();
+            errPfd = remote.getErrorStream();
+        } catch (Throwable t) {
+            destroyQuietly(remote);
+            return new Result(-1, "", "stream open failed: " + t);
+        }
+
+        StreamGobbler outG = new StreamGobbler(new ParcelFileDescriptor.AutoCloseInputStream(outPfd));
+        StreamGobbler errG = new StreamGobbler(new ParcelFileDescriptor.AutoCloseInputStream(errPfd));
         outG.start();
         errG.start();
 
+        boolean finished;
+        try {
+            finished = remote.waitForTimeout(15_000L, TimeUnit.MILLISECONDS.toString());
+            if (!finished && !remote.alive()) finished = true;
+        } catch (Throwable t) {
+            destroyQuietly(remote);
+            return new Result(-1, outG.get(), "waitFor failed: " + t + "\n" + errG.get());
+        }
+        if (!finished) {
+            destroyQuietly(remote);
+            return new Result(-1, outG.get(), "TIMEOUT after 15s\n" + errG.get());
+        }
+
         int exit;
         try {
-            if (!process.waitFor(15, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                return new Result(-1, outG.get(), "TIMEOUT after 15s\n" + errG.get());
-            }
-            exit = process.exitValue();
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            return new Result(-1, outG.get(), "interrupted\n" + errG.get());
+            exit = remote.exitValue();
+        } catch (Throwable t) {
+            exit = -1;
         }
 
         outG.joinQuietly();
         errG.joinQuietly();
         return new Result(exit, outG.get(), errG.get());
+    }
+
+    private static void destroyQuietly(IRemoteProcess remote) {
+        try {
+            remote.destroy();
+        } catch (Throwable ignored) {
+        }
     }
 
     private static final class StreamGobbler extends Thread {
