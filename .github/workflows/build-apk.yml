@@ -23,13 +23,22 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Keep a stable debug keystore
-        # Runners are ephemeral, so without this every build gets a NEW
-        # signature and updates stop installing over the previous APK.
+      - name: Restore signing keystore
+        # Runners are ephemeral; this keeps ONE signing key across all builds so
+        # new APKs install as updates over older ones.
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: timewarp-debug-keystore-v1
+          path: ~/tw.keystore
+          key: timewarp-signing-keystore-v1
+
+      - name: Create signing keystore if missing
+        run: |
+          if [ ! -f ~/tw.keystore ]; then
+            keytool -genkeypair -v -keystore ~/tw.keystore -alias timewarp \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass timewarp123 -keypass timewarp123 \
+              -dname "CN=TimeWarp, OU=Dev, O=TimeWarp, L=Earth, ST=NA, C=US"
+          fi
 
       - name: Build release APK
         run: gradle :app:assembleRelease --stacktrace --warning-mode all -PtwVersionCode=${{ github.run_number }}

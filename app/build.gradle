@@ -14,10 +14,27 @@ android {
         versionName "1.0"
     }
 
+    def releaseKeystore = file(System.getProperty("user.home") + "/tw.keystore")
+
+    signingConfigs {
+        release {
+            if (releaseKeystore.exists()) {
+                storeFile releaseKeystore
+                storePassword 'timewarp123'
+                keyAlias 'timewarp'
+                keyPassword 'timewarp123'
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            if (releaseKeystore.exists()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
         }
         debug {
             signingConfig signingConfigs.debug
