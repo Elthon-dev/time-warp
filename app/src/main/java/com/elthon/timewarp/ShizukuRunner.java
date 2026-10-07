@@ -4,7 +4,8 @@ import android.content.pm.PackageManager;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import moe.shizuku.server.IShizukuService;
+import java.util.concurrent.TimeUnit;
+
 import rikka.shizuku.Shizuku;
 
 /**
@@ -87,13 +88,9 @@ public final class ShizukuRunner {
 
         Process process;
         try {
-            IShizukuService service = IShizukuService.Stub.asInterface(Shizuku.getBinder());
-            if (service == null) {
-                return new Result(-1, "", "shizuku service binder is null");
-            }
-            process = service.newProcess(argv, null, null);
+            process = Runtime.getRuntime().exec(argv);
         } catch (Throwable t) {
-            return new Result(-1, "", "newProcess failed: " + t);
+            return new Result(-1, "", "exec failed: " + t);
         }
 
         StreamGobbler outG = new StreamGobbler(process.getInputStream());
