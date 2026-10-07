@@ -41,6 +41,9 @@ purpose — TLS would fail while the clock is in the future), with a stored
 1. Grab the **TimeWarp-APK** artifact from the
    [Actions tab](../../actions) of this repo (login required) → download → install
    (enable "install from unknown sources" if asked)
+   - first install of a *new version*: since the very first builds used a
+     throwaway CI signing key, **uninstall an older TimeWarp APK before
+     installing a newer one** (builds ≥8 share one stable key and update in place)
 2. Install **Shizuku** and start it:
    - **Android 11+**: Developer options → *Wireless debugging* → pair with the
      in-app pairing code, then press *Start* in Shizuku
