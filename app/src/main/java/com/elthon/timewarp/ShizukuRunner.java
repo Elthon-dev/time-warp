@@ -4,9 +4,7 @@ import android.content.pm.PackageManager;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.util.concurrent.TimeUnit;
-
-import rikka.shizuku.IShizukuService;
+import moe.shizuku.server.IShizukuService;
 import rikka.shizuku.Shizuku;
 
 /**
