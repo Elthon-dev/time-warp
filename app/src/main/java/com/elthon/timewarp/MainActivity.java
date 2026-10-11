@@ -35,7 +35,7 @@ public class MainActivity extends Activity {
     private TextView statusText, logText;
     private ScrollView logScroll;
     private EditText inpTimestamp, inpYear, inpMonth, inpDay, inpHour, inpMin;
-    private Button btnTomorrow, btnReset, btnBubble;
+    private Button btnTomorrow, btnReset, btnBubble, btnYesterday, btnEra2009, btnY2K, btnEra1999;
     private TimeEngine engine;
     private PermissionCard permissionCard;
     private boolean busy;
@@ -67,6 +67,10 @@ public class MainActivity extends Activity {
         btnTomorrow = findViewById(R.id.btnTomorrow);
         btnReset = findViewById(R.id.btnReset);
         btnBubble = findViewById(R.id.btnBubble);
+        btnYesterday = findViewById(R.id.btnYesterday);
+        btnEra2009 = findViewById(R.id.btnEra2009);
+        btnY2K = findViewById(R.id.btnY2K);
+        btnEra1999 = findViewById(R.id.btnEra1999);
 
         engine = new TimeEngine(this, this::appendLog);
         permissionCard = new PermissionCard(this);
@@ -79,6 +83,13 @@ public class MainActivity extends Activity {
             TimeEngine.Outcome o = engine.resetReal();
             afterJump(o);
         }));
+        btnYesterday.setOnClickListener(v -> runAction("yesterday", () -> {
+            TimeEngine.Outcome o = engine.jumpYesterday();
+            afterJump(o);
+        }));
+        btnEra2009.setOnClickListener(v -> eraJump(2009, "summer '09"));
+        btnY2K.setOnClickListener(v -> eraJump(2000, "Y2K"));
+        btnEra1999.setOnClickListener(v -> eraJump(1999, "Y2K eve"));
         findViewById(R.id.btnJumpTs).setOnClickListener(v -> onTimestampJump());
         findViewById(R.id.btnJumpDate).setOnClickListener(v -> onDateJump());
         findViewById(R.id.btnPermissions).setOnClickListener(v -> permissionCard.show(false));
@@ -159,6 +170,15 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, "FAILED - see log", Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    /** Jump to a fixed nostalgic era (mid-day so it's unambiguous and visible). */
+    private void eraJump(int year, String era) {
+        Calendar c = Calendar.getInstance();
+        c.set(year, Calendar.JUNE, 15, 12, 0, 0);
+        c.set(Calendar.MILLISECOND, 0);
+        long target = c.getTimeInMillis();
+        runAction("era-" + era, () -> afterJump(engine.jumpToMillis(target, era)));
     }
 
     private void onTimestampJump() {
@@ -274,8 +294,16 @@ public class MainActivity extends Activity {
     private void setButtonsEnabled(boolean enabled) {
         btnTomorrow.setEnabled(enabled);
         btnReset.setEnabled(enabled);
+        btnYesterday.setEnabled(enabled);
+        btnEra2009.setEnabled(enabled);
+        btnY2K.setEnabled(enabled);
+        btnEra1999.setEnabled(enabled);
         btnTomorrow.setAlpha(enabled ? 1f : 0.5f);
         btnReset.setAlpha(enabled ? 1f : 0.5f);
+        btnYesterday.setAlpha(enabled ? 1f : 0.5f);
+        btnEra2009.setAlpha(enabled ? 1f : 0.5f);
+        btnY2K.setAlpha(enabled ? 1f : 0.5f);
+        btnEra1999.setAlpha(enabled ? 1f : 0.5f);
     }
 
     private void prefillDateFields() {

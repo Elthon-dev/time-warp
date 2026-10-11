@@ -117,6 +117,16 @@ public final class TimeEngine {
         return setAbsolute(target, "+1 day", true);
     }
 
+    /** -1 calendar day from wherever the system clock currently is. */
+    public synchronized Outcome jumpYesterday() {
+        Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(systemNow());
+        c.add(Calendar.DAY_OF_YEAR, -1);
+        long target = c.getTimeInMillis();
+        say(">>> Yesterday: target = " + fmt(target) + " (past warps pass through clamps)");
+        return setAbsolute(target, "-1 day", true);
+    }
+
     /** Back to reality. Prefers a live network clock, falls back to stored offset. */
     public synchronized Outcome resetReal() {
         say(">>> Reset requested, fetching real time...");
